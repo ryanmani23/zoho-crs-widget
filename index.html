@@ -1,0 +1,834 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>CRS Credit Pull</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap');
+
+    :root {
+      --bg: #0d1117;
+      --surface: #161b22;
+      --surface2: #21262d;
+      --border: #30363d;
+      --accent: #00d4aa;
+      --accent-dim: rgba(0, 212, 170, 0.12);
+      --accent-glow: rgba(0, 212, 170, 0.3);
+      --text: #e6edf3;
+      --text-muted: #7d8590;
+      --text-dim: #484f58;
+      --eq: #58a6ff;
+      --ex: #f78166;
+      --tu: #ffa657;
+      --success: #3fb950;
+      --error: #f85149;
+      --warn: #d29922;
+      --mono: 'IBM Plex Mono', monospace;
+      --sans: 'IBM Plex Sans', sans-serif;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: var(--sans);
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      padding: 0;
+      overflow-x: hidden;
+    }
+
+    /* ── Header ── */
+    .header {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 14px 20px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .header-icon {
+      width: 28px; height: 28px;
+      background: var(--accent-dim);
+      border: 1px solid var(--accent);
+      border-radius: 6px;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+    }
+    .header-icon svg { width: 14px; height: 14px; color: var(--accent); }
+    .header-title { font-size: 13px; font-weight: 600; letter-spacing: 0.02em; }
+    .header-sub { font-size: 11px; color: var(--text-muted); font-family: var(--mono); margin-top: 1px; }
+
+    /* ── Scrollable body ── */
+    .body { flex: 1; padding: 16px 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 16px; }
+
+    /* ── Lead Card ── */
+    .lead-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+    .lead-card-header {
+      padding: 10px 14px;
+      background: var(--surface2);
+      border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .lead-card-header span { font-size: 11px; font-weight: 600; color: var(--text-muted); letter-spacing: 0.08em; text-transform: uppercase; }
+    .lead-name { font-size: 15px; font-weight: 600; padding: 12px 14px 4px; }
+    .lead-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 0; }
+    .lead-field { padding: 6px 14px; }
+    .lead-field-label { font-size: 10px; color: var(--text-muted); letter-spacing: 0.06em; text-transform: uppercase; margin-bottom: 2px; }
+    .lead-field-value { font-size: 12px; font-family: var(--mono); color: var(--text); }
+    .lead-field-value.masked { letter-spacing: 0.1em; }
+    .lead-footer { padding: 10px 14px; border-top: 1px solid var(--border); }
+    .edit-btn {
+      background: none; border: 1px solid var(--border); border-radius: 5px;
+      color: var(--text-muted); font-size: 11px; padding: 4px 10px; cursor: pointer;
+      font-family: var(--sans); transition: all 0.15s;
+    }
+    .edit-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+    /* ── Edit form (hidden by default) ── */
+    .edit-form { display: none; padding: 12px 14px; border-top: 1px solid var(--border); flex-direction: column; gap: 10px; }
+    .edit-form.open { display: flex; }
+    .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .form-group { display: flex; flex-direction: column; gap: 4px; }
+    .form-group label { font-size: 10px; color: var(--text-muted); letter-spacing: 0.06em; text-transform: uppercase; }
+    .form-group input {
+      background: var(--bg); border: 1px solid var(--border); border-radius: 5px;
+      color: var(--text); font-family: var(--mono); font-size: 12px;
+      padding: 7px 10px; outline: none; transition: border-color 0.15s;
+    }
+    .form-group input:focus { border-color: var(--accent); }
+    .form-group input.full { grid-column: 1 / -1; }
+
+    /* ── Pull button ── */
+    .pull-btn-wrap { position: relative; }
+    .pull-btn-wrap .tooltip {
+      display: none;
+      position: absolute;
+      bottom: calc(100% + 8px);
+      left: 50%;
+      transform: translateX(-50%);
+      background: #1a1a2e;
+      border: 1px solid var(--warn);
+      color: var(--warn);
+      font-size: 11px;
+      padding: 6px 12px;
+      border-radius: 5px;
+      white-space: nowrap;
+      pointer-events: none;
+      z-index: 10;
+    }
+    .pull-btn-wrap .tooltip::after {
+      content: '';
+      position: absolute;
+      top: 100%; left: 50%;
+      transform: translateX(-50%);
+      border: 5px solid transparent;
+      border-top-color: var(--warn);
+    }
+    .pull-btn-wrap.disabled:hover .tooltip { display: block; }
+    .pull-btn {
+      width: 100%;
+      background: var(--accent);
+      color: #000;
+      border: none;
+      border-radius: 7px;
+      font-family: var(--sans);
+      font-size: 13px;
+      font-weight: 600;
+      padding: 12px;
+      cursor: pointer;
+      transition: all 0.2s;
+      letter-spacing: 0.02em;
+      position: relative;
+      overflow: hidden;
+    }
+    .pull-btn:hover:not(:disabled) { background: #00ffe0; box-shadow: 0 0 20px var(--accent-glow); }
+    .pull-btn:disabled { opacity: 0.4; cursor: not-allowed; background: var(--surface2); color: var(--text-muted); border: 1px solid var(--border); }
+    .pull-btn.loading { background: var(--surface2); color: var(--accent); border: 1px solid var(--accent); }
+
+    /* ── Status log ── */
+    .status-log {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      overflow: hidden;
+      display: none;
+    }
+    .status-log.visible { display: block; }
+    .status-log-header {
+      padding: 8px 14px;
+      background: var(--surface2);
+      border-bottom: 1px solid var(--border);
+      font-size: 10px; font-weight: 600; color: var(--text-muted);
+      letter-spacing: 0.08em; text-transform: uppercase;
+    }
+    .log-entries { padding: 10px 14px; display: flex; flex-direction: column; gap: 5px; max-height: 140px; overflow-y: auto; }
+    .log-entry { display: flex; gap: 8px; align-items: flex-start; font-size: 11px; font-family: var(--mono); }
+    .log-time { color: var(--text-dim); flex-shrink: 0; }
+    .log-msg { color: var(--text-muted); }
+    .log-msg.ok { color: var(--success); }
+    .log-msg.err { color: var(--error); }
+    .log-msg.warn { color: var(--warn); }
+    .log-msg.info { color: var(--accent); }
+
+    /* ── Results panel ── */
+    .results {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      overflow: hidden;
+      display: none;
+      animation: slideIn 0.3s ease;
+    }
+    .results.visible { display: block; }
+    @keyframes slideIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+
+    .results-header {
+      padding: 10px 14px;
+      background: var(--surface2);
+      border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .results-header span { font-size: 11px; font-weight: 600; color: var(--text-muted); letter-spacing: 0.08em; text-transform: uppercase; }
+    .report-id { font-family: var(--mono); font-size: 11px; color: var(--accent); cursor: pointer; }
+    .report-id:hover { text-decoration: underline; }
+
+    .score-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1px; background: var(--border); }
+    .score-cell { background: var(--surface); padding: 16px 12px; text-align: center; }
+    .score-bureau { font-size: 10px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 6px; }
+    .score-bureau.eq { color: var(--eq); }
+    .score-bureau.ex { color: var(--ex); }
+    .score-bureau.tu { color: var(--tu); }
+    .score-value { font-family: var(--mono); font-size: 28px; font-weight: 600; line-height: 1; }
+    .score-value.eq { color: var(--eq); }
+    .score-value.ex { color: var(--ex); }
+    .score-value.tu { color: var(--tu); }
+    .score-value.na { font-size: 16px; color: var(--text-dim); }
+    .score-grade { margin-top: 4px; font-size: 10px; color: var(--text-muted); }
+
+    .results-footer { padding: 12px 14px; border-top: 1px solid var(--border); display: flex; gap: 8px; }
+    .footer-btn {
+      flex: 1; padding: 8px; border-radius: 5px; font-size: 12px; font-weight: 500;
+      cursor: pointer; font-family: var(--sans); border: 1px solid var(--border);
+      background: none; color: var(--text-muted); transition: all 0.15s;
+    }
+    .footer-btn:hover { border-color: var(--accent); color: var(--accent); }
+    .footer-btn.primary { background: var(--accent-dim); border-color: var(--accent); color: var(--accent); }
+    .footer-btn.primary:hover { background: var(--accent); color: #000; }
+
+    /* ── Error banner ── */
+    .error-banner {
+      background: rgba(248, 81, 73, 0.1);
+      border: 1px solid var(--error);
+      border-radius: 7px;
+      padding: 12px 14px;
+      font-size: 12px;
+      color: var(--error);
+      display: none;
+    }
+    .error-banner.visible { display: block; }
+
+    /* ── CORS warning ── */
+    .cors-info {
+      background: rgba(210, 153, 34, 0.1);
+      border: 1px solid var(--warn);
+      border-radius: 7px;
+      padding: 12px 14px;
+      font-size: 11px;
+      color: var(--warn);
+      line-height: 1.6;
+      display: none;
+    }
+    .cors-info.visible { display: block; }
+    .cors-info strong { display: block; margin-bottom: 4px; }
+
+    /* ── Spinner ── */
+    .spinner {
+      display: inline-block; width: 12px; height: 12px;
+      border: 2px solid var(--accent); border-top-color: transparent;
+      border-radius: 50%; animation: spin 0.7s linear infinite; vertical-align: middle; margin-right: 6px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── Scrollbar ── */
+    ::-webkit-scrollbar { width: 4px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+  </style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-icon">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
+    </svg>
+  </div>
+  <div>
+    <div class="header-title">CRS Credit Pull</div>
+    <div class="header-sub">MISMO 2.3.1 · Tri-Merge Soft Inquiry</div>
+  </div>
+</div>
+
+<div class="body">
+
+  <!-- Lead info card -->
+  <div class="lead-card">
+    <div class="lead-card-header">
+      <span>Borrower</span>
+      <button class="edit-btn" onclick="toggleEdit()">Edit fields</button>
+    </div>
+    <div class="lead-name" id="displayName">Loading lead...</div>
+    <div class="lead-fields">
+      <div class="lead-field">
+        <div class="lead-field-label">SSN</div>
+        <div class="lead-field-value masked" id="displaySSN">—</div>
+      </div>
+      <div class="lead-field">
+        <div class="lead-field-label">Date of Birth</div>
+        <div class="lead-field-value" id="displayDOB">—</div>
+      </div>
+      <div class="lead-field" style="grid-column:1/-1">
+        <div class="lead-field-label">Address</div>
+        <div class="lead-field-value" id="displayAddr">—</div>
+      </div>
+    </div>
+
+    <!-- Editable fields -->
+    <div class="edit-form" id="editForm">
+      <div class="form-row">
+        <div class="form-group">
+          <label>First Name</label>
+          <input type="text" id="fFirstName" />
+        </div>
+        <div class="form-group">
+          <label>Last Name</label>
+          <input type="text" id="fLastName" />
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Middle Name</label>
+          <input type="text" id="fMiddleName" />
+        </div>
+        <div class="form-group">
+          <label>SSN (digits only)</label>
+          <input type="text" id="fSSN" maxlength="9" />
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Date of Birth</label>
+          <input type="date" id="fDOB" />
+        </div>
+        <div class="form-group">
+          <label>Zip Code</label>
+          <input type="text" id="fZip" maxlength="5" />
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group" style="grid-column:1/-1">
+          <label>Street Address</label>
+          <input type="text" id="fStreet" />
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>City</label>
+          <input type="text" id="fCity" />
+        </div>
+        <div class="form-group">
+          <label>State (2-letter)</label>
+          <input type="text" id="fState" maxlength="2" />
+        </div>
+      </div>
+      <button class="edit-btn" onclick="applyEdit()" style="align-self:flex-start">Apply</button>
+    </div>
+  </div>
+
+  <!-- CORS warning (shown if fetch fails with network error) -->
+  <div class="cors-info" id="corsInfo">
+    <strong>⚠ Possible CORS block detected</strong>
+    The request was blocked before reaching the CRS server. This typically means the API doesn't allow browser-originated requests. A lightweight proxy (Cloudflare Worker) can fix this in ~10 minutes. See console for details.
+  </div>
+
+  <!-- Error banner -->
+  <div class="error-banner" id="errorBanner"></div>
+
+  <!-- Pull button -->
+  <div class="pull-btn-wrap" id="pullBtnWrap">
+    <span class="tooltip" id="pullTooltip"></span>
+    <button class="pull-btn" id="pullBtn" onclick="startPull()">
+      Pull Soft Credit Report
+    </button>
+  </div>
+
+  <!-- Status log -->
+  <div class="status-log" id="statusLog">
+    <div class="status-log-header">Activity Log</div>
+    <div class="log-entries" id="logEntries"></div>
+  </div>
+
+  <!-- Results -->
+  <div class="results" id="resultsPanel">
+    <div class="results-header">
+      <span>Credit Scores</span>
+      <span class="report-id" id="reportIdDisplay" onclick="copyReportId()" title="Click to copy"></span>
+    </div>
+    <div class="score-grid">
+      <div class="score-cell">
+        <div class="score-bureau eq">Equifax</div>
+        <div class="score-value eq" id="scoreEQ">—</div>
+        <div class="score-grade" id="gradeEQ"></div>
+      </div>
+      <div class="score-cell">
+        <div class="score-bureau ex">Experian</div>
+        <div class="score-value ex" id="scoreEX">—</div>
+        <div class="score-grade" id="gradeEX"></div>
+      </div>
+      <div class="score-cell">
+        <div class="score-bureau tu">TransUnion</div>
+        <div class="score-value tu" id="scoreTU">—</div>
+        <div class="score-grade" id="gradeTU"></div>
+      </div>
+    </div>
+    <div class="results-footer">
+      <button class="footer-btn" onclick="resetWidget()">New Pull</button>
+      <button class="footer-btn primary" id="copyBtn" onclick="copyReportId()">Copy Report ID</button>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// ─────────────────────────────────────────────
+// CONFIG — swap these 4 for production values
+// ─────────────────────────────────────────────
+const CONFIG = {
+  host:       'api-sandbox.stitchcredit.com',
+  endpoint:   'https://api-sandbox.stitchcredit.com/api',
+  loginId:    'LegionsUnitedSbox',
+  loginPwd:   'MbLgVyJN6LB8PfopmKKA$H8L',
+  submitter:  'TestSubmittingPartyID',
+  submitterName: 'submitterName',
+  pollMax:    12,
+  pollDelay:  5000, // ms between poll attempts
+};
+
+// ─────────────────────────────────────────────
+// State
+// ─────────────────────────────────────────────
+let lead = {
+  firstName: '', lastName: '', middleName: '',
+  ssn: '', dob: '', street: '', city: '', state: '', zip: ''
+};
+let reportId = null;
+let polling = false;
+
+// ─────────────────────────────────────────────
+// Zoho Widget SDK init
+// ─────────────────────────────────────────────
+function initZoho() {
+  // Zoho widget SDK — loads lead fields when available
+  if (typeof ZOHO !== 'undefined') {
+    ZOHO.embeddedApp.on("PageLoad", function(data) {
+      const entity = data.Entity;
+      const id = data.EntityId[0];
+      ZOHO.CRM.API.getRecord({ Entity: entity, RecordID: id }).then(function(res) {
+        const r = res.data[0];
+        lead.firstName  = r['First_Name']  || '';
+        lead.lastName   = r['Last_Name']   || '';
+        lead.middleName = r['Middle_Name'] || '';
+        lead.ssn        = (r['SSN'] || '').replace(/\D/g, '');
+        lead.dob        = r['Date_of_Birth'] || r['DOB'] || '';  // adjust to your actual field API name
+        lead.street     = r['Street'] || r['Mailing_Street'] || '';
+        lead.city       = r['City']   || r['Mailing_City']   || '';
+        lead.state      = r['State']  || r['Mailing_State']  || '';
+        lead.zip        = r['Zip_Code'] || r['Mailing_Zip']  || '';
+        renderLeadCard();
+      });
+    });
+    ZOHO.embeddedApp.init();
+  } else {
+    // ── DEMO MODE (running outside Zoho) ──
+    lead = {
+      firstName: 'MARISOL', lastName: 'TESTCASE', middleName: 'L',
+      ssn: '000000001', dob: '1999-01-30',
+      street: '220 Locust Ave', city: 'Anthill', state: 'MO', zip: '65488'
+    };
+    renderLeadCard();
+    log('Demo mode — using sandbox test data', 'warn');
+  }
+}
+
+// ─────────────────────────────────────────────
+// Render lead card
+// ─────────────────────────────────────────────
+function renderLeadCard() {
+  document.getElementById('displayName').textContent =
+    [lead.firstName, lead.middleName, lead.lastName].filter(Boolean).join(' ') || '(No name)';
+  const ssn = lead.ssn;
+  document.getElementById('displaySSN').textContent =
+    ssn ? '•••-••-' + ssn.slice(-4) : '(not set)';
+  document.getElementById('displayDOB').textContent = lead.dob || '(not set)';
+  document.getElementById('displayAddr').textContent =
+    [lead.street, lead.city, lead.state, lead.zip].filter(Boolean).join(', ') || '(not set)';
+
+  // Check required fields and update button state
+  checkRequiredFields();
+
+  // Populate edit fields
+  document.getElementById('fFirstName').value  = lead.firstName;
+  document.getElementById('fLastName').value   = lead.lastName;
+  document.getElementById('fMiddleName').value = lead.middleName;
+  document.getElementById('fSSN').value        = lead.ssn;
+  document.getElementById('fDOB').value        = lead.dob;
+  document.getElementById('fStreet').value     = lead.street;
+  document.getElementById('fCity').value       = lead.city;
+  document.getElementById('fState').value      = lead.state;
+  document.getElementById('fZip').value        = lead.zip;
+}
+
+function toggleEdit() {
+  const f = document.getElementById('editForm');
+  f.classList.toggle('open');
+  document.querySelector('.edit-btn').textContent = f.classList.contains('open') ? 'Cancel' : 'Edit fields';
+}
+
+function applyEdit() {
+  lead.firstName  = document.getElementById('fFirstName').value.trim().toUpperCase();
+  lead.lastName   = document.getElementById('fLastName').value.trim().toUpperCase();
+  lead.middleName = document.getElementById('fMiddleName').value.trim().toUpperCase();
+  lead.ssn        = document.getElementById('fSSN').value.replace(/\D/g, '');
+  lead.dob        = document.getElementById('fDOB').value;
+  lead.street     = document.getElementById('fStreet').value.trim();
+  lead.city       = document.getElementById('fCity').value.trim();
+  lead.state      = document.getElementById('fState').value.trim().toUpperCase();
+  lead.zip        = document.getElementById('fZip').value.trim();
+  renderLeadCard();
+  toggleEdit();
+  checkRequiredFields();
+}
+
+// ─────────────────────────────────────────────
+// Logging
+// ─────────────────────────────────────────────
+function log(msg, type = 'info') {
+  document.getElementById('statusLog').classList.add('visible');
+  const el = document.createElement('div');
+  el.className = 'log-entry';
+  const now = new Date();
+  const t = now.toTimeString().slice(0,8);
+  el.innerHTML = `<span class="log-time">${t}</span><span class="log-msg ${type}">${msg}</span>`;
+  const entries = document.getElementById('logEntries');
+  entries.appendChild(el);
+  entries.scrollTop = entries.scrollHeight;
+}
+
+// ─────────────────────────────────────────────
+// XML builders
+// ─────────────────────────────────────────────
+function buildOrderXML() {
+  const now = new Date().toISOString().slice(0,19);
+  return `<REQUEST_GROUP MISMOVersionID="2.3.1">
+  <SUBMITTING_PARTY _Name="${CONFIG.submitterName}" _Identifier="${CONFIG.submitter}">
+    <PREFERRED_RESPONSE _Format="Other" _FormatOtherDescription="HTML"></PREFERRED_RESPONSE>
+  </SUBMITTING_PARTY>
+  <REQUEST RequestDatetime="${now}" InternalAccountIdentifier="" LoginAccountIdentifier="${CONFIG.loginId}" LoginAccountPassword="${CONFIG.loginPwd}">
+    <REQUEST_DATA>
+      <CREDIT_REQUEST MISMOVersionID="2.3.1" LenderCaseIdentifier="${lead.lastName}_${Date.now()}" RequestingPartyRequestedByName="Legions United Funding">
+        <CREDIT_REQUEST_DATA CreditRequestID="CreditRequest1" BorrowerID="Borrower" CreditReportIdentifier="" CreditReportRequestActionType="Submit" CreditReportType="Merge" CreditRequestDateTime="${now}" CreditRequestType="Individual">
+          <CREDIT_REPOSITORY_INCLUDED _EquifaxIndicator="Y" _ExperianIndicator="Y" _TransUnionIndicator="Y"></CREDIT_REPOSITORY_INCLUDED>
+        </CREDIT_REQUEST_DATA>
+        <LOAN_APPLICATION>
+          <BORROWER BorrowerID="Borrower" _FirstName="${lead.firstName}" _MiddleName="${lead.middleName}" _LastName="${lead.lastName}" _NameSuffix="" _AgeAtApplicationYears="" _BirthDate="${lead.dob}" _PrintPositionType="Borrower" _SSN="${lead.ssn}" MaritalStatusType="NotProvided">
+            <_RESIDENCE _StreetAddress="${lead.street}" _City="${lead.city}" _State="${lead.state}" _PostalCode="${lead.zip}" BorrowerResidencyType="Current"></_RESIDENCE>
+          </BORROWER>
+        </LOAN_APPLICATION>
+      </CREDIT_REQUEST>
+    </REQUEST_DATA>
+  </REQUEST>
+</REQUEST_GROUP>`;
+}
+
+function buildRetrieveXML(creditReportId) {
+  const now = new Date().toISOString().slice(0,19);
+  return `<REQUEST_GROUP MISMOVersionID="2.3.1">
+  <SUBMITTING_PARTY _Name="${CONFIG.submitterName}" _Identifier="${CONFIG.submitter}">
+    <PREFERRED_RESPONSE _Format="Other" _FormatOtherDescription="HTML"></PREFERRED_RESPONSE>
+  </SUBMITTING_PARTY>
+  <REQUEST RequestDatetime="${now}" InternalAccountIdentifier="" LoginAccountIdentifier="${CONFIG.loginId}" LoginAccountPassword="${CONFIG.loginPwd}">
+    <REQUEST_DATA>
+      <CREDIT_REQUEST MISMOVersionID="2.3.1" LenderCaseIdentifier="${lead.lastName}_${creditReportId}" RequestingPartyRequestedByName="Legions United Funding">
+        <CREDIT_REQUEST_DATA CreditRequestID="CreditRequest1" BorrowerID="Borrower" CreditReportIdentifier="${creditReportId}" CreditReportRequestActionType="StatusQuery" CreditReportType="Merge" CreditRequestDateTime="${now}" CreditRequestType="Individual">
+          <CREDIT_REPOSITORY_INCLUDED _EquifaxIndicator="Y" _ExperianIndicator="Y" _TransUnionIndicator="Y"></CREDIT_REPOSITORY_INCLUDED>
+        </CREDIT_REQUEST_DATA>
+        <LOAN_APPLICATION>
+          <BORROWER BorrowerID="Borrower" _FirstName="${lead.firstName}" _MiddleName="${lead.middleName}" _LastName="${lead.lastName}" _NameSuffix="" _AgeAtApplicationYears="" _BirthDate="${lead.dob}" _PrintPositionType="Borrower" _SSN="${lead.ssn}" MaritalStatusType="NotProvided">
+            <_RESIDENCE _StreetAddress="${lead.street}" _City="${lead.city}" _State="${lead.state}" _PostalCode="${lead.zip}" BorrowerResidencyType="Current"></_RESIDENCE>
+          </BORROWER>
+        </LOAN_APPLICATION>
+      </CREDIT_REQUEST>
+    </REQUEST_DATA>
+  </REQUEST>
+</REQUEST_GROUP>`;
+}
+
+// ─────────────────────────────────────────────
+// API calls
+// ─────────────────────────────────────────────
+async function postXML(xml) {
+  const res = await fetch(CONFIG.endpoint, {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/xml; charset=utf-8' },
+    body: xml
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+  return await res.text();
+}
+
+function parseXML(text) {
+  return new DOMParser().parseFromString(text, 'application/xml');
+}
+
+function getAttr(doc, selector, attr) {
+  const el = doc.querySelector(selector);
+  return el ? el.getAttribute(attr) : null;
+}
+
+// ─────────────────────────────────────────────
+// Score extraction
+// ─────────────────────────────────────────────
+function extractScores(doc) {
+  const scores = { EQ: null, EX: null, TU: null };
+
+  // CreditRepositorySourceType is an attribute directly on CREDIT_SCORE in this API
+  doc.querySelectorAll('CREDIT_SCORE').forEach(node => {
+    const val = node.getAttribute('_Value');
+    const src = node.getAttribute('CreditRepositorySourceType') || '';
+    if (/equifax/i.test(src))    scores.EQ = val;
+    if (/experian/i.test(src))   scores.EX = val;
+    if (/transunion/i.test(src)) scores.TU = val;
+  });
+
+  return scores;
+}
+
+function scoreGrade(score) {
+  if (!score) return '';
+  const n = parseInt(score);
+  if (n >= 740) return 'Excellent';
+  if (n >= 670) return 'Good';
+  if (n >= 580) return 'Fair';
+  return 'Poor';
+}
+
+// ─────────────────────────────────────────────
+// Required field validation
+// ─────────────────────────────────────────────
+function checkRequiredFields() {
+  const missing = [];
+  if (!lead.ssn)       missing.push('SSN');
+  if (!lead.dob)       missing.push('Date of Birth');
+  if (!lead.firstName) missing.push('First Name');
+  if (!lead.lastName)  missing.push('Last Name');
+
+  const btn  = document.getElementById('pullBtn');
+  const wrap = document.getElementById('pullBtnWrap');
+  const tip  = document.getElementById('pullTooltip');
+
+  if (missing.length > 0) {
+    btn.disabled = true;
+    wrap.classList.add('disabled');
+    tip.textContent = 'Required to pull: ' + missing.join(', ');
+  } else {
+    btn.disabled = false;
+    wrap.classList.remove('disabled');
+    tip.textContent = '';
+  }
+}
+
+// ─────────────────────────────────────────────
+// Main pull flow
+// ─────────────────────────────────────────────
+async function startPull() {
+  // Validate
+  if (!lead.ssn) { showError('SSN is required. Use "Edit fields" to enter it.'); return; }
+  if (!lead.dob) { showError('Date of Birth is required. Use "Edit fields" to enter it.'); return; }
+  if (!lead.firstName || !lead.lastName) { showError('First and last name are required.'); return; }
+
+  clearError();
+  setLoading(true);
+  document.getElementById('resultsPanel').classList.remove('visible');
+  document.getElementById('corsInfo').classList.remove('visible');
+
+  // ── Step 1: Order ──
+  log('Submitting Order request...', 'info');
+  let orderResponseText;
+  try {
+    orderResponseText = await postXML(buildOrderXML());
+  } catch (err) {
+    setLoading(false);
+    if (err.message === 'Failed to fetch' || err.name === 'TypeError') {
+      document.getElementById('corsInfo').classList.add('visible');
+      log('Network error — possible CORS block. See warning above.', 'err');
+    } else {
+      showError('Order request failed: ' + err.message);
+      log('Order failed: ' + err.message, 'err');
+    }
+    return;
+  }
+
+  const orderDoc = parseXML(orderResponseText);
+
+  // Check for API error
+  const errorMsg = orderDoc.querySelector('CREDIT_ERROR_MESSAGE _Text, _Text');
+  const statusDesc = getAttr(orderDoc, 'STATUS', '_Description');
+  if (statusDesc === 'ERROR') {
+    const errText = orderDoc.querySelector('_Text');
+    const msg = errText ? errText.textContent.trim() : 'Unknown API error';
+    showError('API Error: ' + msg);
+    log('API error: ' + msg, 'err');
+    setLoading(false);
+    return;
+  }
+
+  // Extract report ID
+  reportId = getAttr(orderDoc, 'CREDIT_RESPONSE', 'CreditReportIdentifier');
+  if (!reportId) {
+    showError('No CreditReportIdentifier returned. Check response XML.');
+    log('No report ID in response', 'err');
+    setLoading(false);
+    return;
+  }
+
+  log(`Order accepted — Report ID: ${reportId}`, 'ok');
+  log(`Status: ${statusDesc || 'NOTREADY'} — beginning polling...`, 'info');
+
+  // ── Step 2: Poll ──
+  let attempt = 0;
+  while (attempt < CONFIG.pollMax) {
+    attempt++;
+    await sleep(CONFIG.pollDelay);
+    log(`Poll attempt ${attempt}/${CONFIG.pollMax}...`, 'info');
+
+    let retrieveText;
+    try {
+      retrieveText = await postXML(buildRetrieveXML(reportId));
+    } catch (err) {
+      log('Poll request failed: ' + err.message, 'err');
+      continue;
+    }
+
+    const retrieveDoc = parseXML(retrieveText);
+    const pollStatus = getAttr(retrieveDoc, 'STATUS', '_Description');
+    const pollCode   = getAttr(retrieveDoc, 'STATUS', '_Code');
+
+    if (pollStatus === 'ERROR') {
+      const errText = retrieveDoc.querySelector('_Text');
+      const msg = errText ? errText.textContent.trim() : 'Unknown error on retrieve';
+      showError('Retrieve error: ' + msg);
+      log('Retrieve error: ' + msg, 'err');
+      setLoading(false);
+      return;
+    }
+
+    if (pollStatus !== 'NOTREADY' && pollCode !== 'S010') {
+      // Report is ready
+      log('Report ready — parsing scores...', 'ok');
+      const scores = extractScores(retrieveDoc);
+      log(`EQ: ${scores.EQ || 'N/A'} | EX: ${scores.EX || 'N/A'} | TU: ${scores.TU || 'N/A'}`, 'ok');
+      showResults(scores);
+      setLoading(false);
+      return;
+    }
+
+    log(`Not ready yet (${pollCode}) — waiting ${CONFIG.pollDelay/1000}s...`, 'warn');
+  }
+
+  // Timed out
+  showError(`Report still not ready after ${CONFIG.pollMax} attempts. Try manually polling or check the CRS dashboard.`);
+  log('Poll timeout reached', 'err');
+  setLoading(false);
+}
+
+// ─────────────────────────────────────────────
+// UI helpers
+// ─────────────────────────────────────────────
+function setLoading(on) {
+  const btn = document.getElementById('pullBtn');
+  if (on) {
+    btn.disabled = true;
+    btn.classList.add('loading');
+    btn.innerHTML = '<span class="spinner"></span>Processing...';
+  } else {
+    btn.disabled = false;
+    btn.classList.remove('loading');
+    btn.innerHTML = 'Pull Soft Credit Report';
+  }
+}
+
+function showResults(scores) {
+  const panel = document.getElementById('resultsPanel');
+  panel.classList.add('visible');
+
+  document.getElementById('reportIdDisplay').textContent = 'Report #' + reportId;
+
+  ['EQ','EX','TU'].forEach(b => {
+    const val = scores[b];
+    const el = document.getElementById('score' + b);
+    const gr = document.getElementById('grade' + b);
+    if (val) {
+      el.textContent = val;
+      el.classList.remove('na');
+      gr.textContent = scoreGrade(val);
+    } else {
+      el.textContent = 'N/A';
+      el.classList.add('na');
+      gr.textContent = '';
+    }
+  });
+}
+
+function showError(msg) {
+  const el = document.getElementById('errorBanner');
+  el.textContent = '⚠ ' + msg;
+  el.classList.add('visible');
+}
+
+function clearError() {
+  document.getElementById('errorBanner').classList.remove('visible');
+}
+
+function copyReportId() {
+  if (!reportId) return;
+  navigator.clipboard.writeText(reportId).then(() => {
+    const btn = document.getElementById('copyBtn');
+    btn.textContent = 'Copied!';
+    setTimeout(() => btn.textContent = 'Copy Report ID', 1500);
+  });
+}
+
+function resetWidget() {
+  document.getElementById('resultsPanel').classList.remove('visible');
+  document.getElementById('statusLog').classList.remove('visible');
+  document.getElementById('logEntries').innerHTML = '';
+  clearError();
+  reportId = null;
+}
+
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+// ── Boot ──
+initZoho();
+</script>
+</body>
+</html>
