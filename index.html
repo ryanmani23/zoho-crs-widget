@@ -464,7 +464,8 @@ function initZoho() {
         street: '220 Locust Ave', city: 'Anthill', state: 'MO', zip: '65488'
       };
       renderLeadCard();
-      log('Sandbox mode — using test borrower data. Record context loaded for Save to Lead.', 'warn');
+      log('v2.1 — Sandbox mode. Record context loaded.', 'warn');
+      log('Widget version: 2.1', 'info');
       /* PRODUCTION — uncomment this block and remove the sandbox block above:
       ZOHO.CRM.API.getRecord({ Entity: zohoEntity, RecordID: zohoRecordId }).then(function(res) {
         const r = res.data[0];
@@ -490,7 +491,8 @@ function initZoho() {
       street: '220 Locust Ave', city: 'Anthill', state: 'MO', zip: '65488'
     };
     renderLeadCard();
-    log('Demo mode — using sandbox test data', 'warn');
+    log('v2.1 — Demo mode (outside Zoho)', 'warn');
+    log('Widget version: 2.1', 'info');
   }
 }
 
@@ -967,17 +969,21 @@ function downloadPDF() {
 }
 
 async function savePDFToZoho() {
-  if (!pdfBase64) return;
+  log('v2.1 — Save clicked. pdf=' + !!pdfBase64 + ' html=' + !!window._reportHtml + ' recordId=' + zohoRecordId, 'info');
+  if (!pdfBase64 && !window._reportHtml) {
+    log('No report data to save.', 'err');
+    return;
+  }
   const saveBtn = document.getElementById('saveBtn');
 
   if (typeof ZOHO === 'undefined' || !zohoRecordId) {
-    log('Cannot save — not running inside Zoho.', 'err');
+    log('Cannot save — ZOHO=' + (typeof ZOHO) + ' recordId=' + zohoRecordId, 'err');
     return;
   }
 
   saveBtn.disabled    = true;
   saveBtn.textContent = 'Saving...';
-  log('Attaching PDF to lead record...', 'info');
+  log('Attaching report to lead record...', 'info');
 
   try {
     let file;
