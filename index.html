@@ -448,7 +448,7 @@ let polling = false;
 // ─────────────────────────────────────────────
 function initZoho() {
   // Zoho widget SDK — loads lead fields when available
-  if (typeof ZOHO !== 'undefined') {
+  if (false && typeof ZOHO !== 'undefined') { // SET TO false FOR SANDBOX TESTING, remove 'false &&' FOR PRODUCTION
     ZOHO.embeddedApp.on("PageLoad", function(data) {
       const entity = data.Entity;
       const id = data.EntityId[0];
