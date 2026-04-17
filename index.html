@@ -780,9 +780,11 @@ async function startPull() {
       // PDF base64 is inside EMBEDDED_FILE > DOCUMENT, starts with JVBERi (%PDF)
       pdfBase64 = null;
       const docEls = retrieveDoc.querySelectorAll('DOCUMENT');
-      docEls.forEach(el => {
+      log('DOCUMENT nodes found: ' + docEls.length, 'info');
+      docEls.forEach((el, i) => {
         const raw = el.textContent.replace(/[^A-Za-z0-9+/=]/g, '');
-        if (raw.startsWith('JVBER') && raw.length > 100) {
+        log('Doc[' + i + '] len=' + raw.length + ' start=' + raw.substring(0,10), 'info');
+        if (raw.length > 1000) {
           pdfBase64 = raw;
         }
       });
