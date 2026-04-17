@@ -508,6 +508,7 @@ function toggleEdit() {
   const f = document.getElementById('editForm');
   f.classList.toggle('open');
   document.querySelector('.edit-btn').textContent = f.classList.contains('open') ? 'Cancel' : 'Edit fields';
+  checkRequiredFields();
 }
 
 function applyEdit() {
@@ -643,19 +644,36 @@ function scoreGrade(score) {
 // ─────────────────────────────────────────────
 function checkRequiredFields() {
   const missing = [];
-  if (!lead.ssn)       missing.push('SSN');
-  if (!lead.dob)       missing.push('Date of Birth');
-  if (!lead.firstName) missing.push('First Name');
-  if (!lead.lastName)  missing.push('Last Name');
+  const invalid = [];
+
+  if (!lead.firstName)                              missing.push('First Name');
+  if (!lead.lastName)                               missing.push('Last Name');
+  if (!lead.ssn || lead.ssn.length < 9)             missing.push('SSN (9 digits)');
+  if (!lead.dob)                                    missing.push('Date of Birth');
+  if (!lead.street)                                 missing.push('Street Address');
+  if (!lead.city)                                   missing.push('City');
+  if (!lead.zip || lead.zip.length < 5)             missing.push('Zip Code (5 digits)');
+  if (!lead.state)                                  missing.push('State');
+  else if (!/^[A-Z]{2}$/.test(lead.state.trim().toUpperCase())) invalid.push('State must be 2 letters (e.g. TX)');
+
+  const editing = document.getElementById('editForm').classList.contains('open');
 
   const btn  = document.getElementById('pullBtn');
   const wrap = document.getElementById('pullBtnWrap');
   const tip  = document.getElementById('pullTooltip');
 
-  if (missing.length > 0) {
+  const issues = [...missing, ...invalid];
+
+  if (issues.length > 0 || editing) {
     btn.disabled = true;
     wrap.classList.add('disabled');
-    tip.textContent = 'Required to pull: ' + missing.join(', ');
+    if (editing) {
+      tip.textContent = 'Apply or cancel edits before pulling';
+    } else if (missing.length > 0) {
+      tip.textContent = 'Required: ' + missing.join(', ');
+    } else {
+      tip.textContent = invalid.join(', ');
+    }
   } else {
     btn.disabled = false;
     wrap.classList.remove('disabled');
