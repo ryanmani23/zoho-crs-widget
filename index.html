@@ -777,15 +777,15 @@ async function startPull() {
       const scores = extractScores(retrieveDoc);
       log(`EQ: ${scores.EQ || 'N/A'} | EX: ${scores.EX || 'N/A'} | TU: ${scores.TU || 'N/A'}`, 'ok');
       // Extract base64 PDF
-      const docEl = retrieveDoc.querySelector('DOCUMENT');
-      if (docEl) {
-        // Strip whitespace and any non-base64 characters (CDATA remnants etc)
-        pdfBase64 = docEl.textContent.replace(/[^A-Za-z0-9+/=]/g, '');
-        // Validate it's non-empty and looks like base64
-        if (!pdfBase64 || pdfBase64.length < 100) pdfBase64 = null;
-      } else {
-        pdfBase64 = null;
-      }
+      // PDF base64 is inside EMBEDDED_FILE > DOCUMENT, starts with JVBERi (%PDF)
+      pdfBase64 = null;
+      const docEls = retrieveDoc.querySelectorAll('DOCUMENT');
+      docEls.forEach(el => {
+        const raw = el.textContent.replace(/[^A-Za-z0-9+/=]/g, '');
+        if (raw.startsWith('JVBER') && raw.length > 100) {
+          pdfBase64 = raw;
+        }
+      });
       if (pdfBase64) {
         log('PDF report attached — ready to download/save.', 'ok');
         log('PDF b64 sample: ' + pdfBase64.substring(0,40) + '...' + pdfBase64.slice(-20), 'info');
