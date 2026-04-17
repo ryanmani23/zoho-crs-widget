@@ -422,14 +422,16 @@
 // CONFIG — swap these 4 for production values
 // ─────────────────────────────────────────────
 const CONFIG = {
-  host:       'api-sandbox.stitchcredit.com',
-  endpoint:   'https://crimson-queen-677f.ryanmani.workers.dev',
-  loginId:    'LegionsUnitedSbox',
-  loginPwd:   'MbLgVyJN6LB8PfopmKKA$H8L',
-  submitter:  'TestSubmittingPartyID',
+  host:          'api-sandbox.stitchcredit.com',
+  endpoint:      'https://crimson-queen-677f.ryanmani.workers.dev',
+  loginId:       'LegionsUnitedSbox',
+  loginPwd:      'MbLgVyJN6LB8PfopmKKA$H8L',
+  submitter:     'TestSubmittingPartyID',
   submitterName: 'submitterName',
-  pollMax:    12,
-  pollDelay:  5000, // ms between poll attempts
+  pollMax:       12,
+  pollDelay:     5000, // ms between poll attempts
+  // Set to '_Format="PDF"' for production, '_Format="Other" _FormatOtherDescription="HTML"' for sandbox
+  preferredResponse: '_Format="Other" _FormatOtherDescription="HTML"',
 };
 
 // ─────────────────────────────────────────────
@@ -553,7 +555,7 @@ function buildOrderXML() {
   const now = new Date().toISOString().slice(0,19);
   return `<REQUEST_GROUP MISMOVersionID="2.3.1">
   <SUBMITTING_PARTY _Name="${CONFIG.submitterName}" _Identifier="${CONFIG.submitter}">
-    <PREFERRED_RESPONSE _Format="Other" _FormatOtherDescription="HTML"></PREFERRED_RESPONSE>
+    <PREFERRED_RESPONSE ${CONFIG.preferredResponse}></PREFERRED_RESPONSE>
   </SUBMITTING_PARTY>
   <REQUEST RequestDatetime="${now}" InternalAccountIdentifier="" LoginAccountIdentifier="${CONFIG.loginId}" LoginAccountPassword="${CONFIG.loginPwd}">
     <REQUEST_DATA>
@@ -576,7 +578,7 @@ function buildRetrieveXML(creditReportId) {
   const now = new Date().toISOString().slice(0,19);
   return `<REQUEST_GROUP MISMOVersionID="2.3.1">
   <SUBMITTING_PARTY _Name="${CONFIG.submitterName}" _Identifier="${CONFIG.submitter}">
-    <PREFERRED_RESPONSE _Format="Other" _FormatOtherDescription="HTML"></PREFERRED_RESPONSE>
+    <PREFERRED_RESPONSE ${CONFIG.preferredResponse}></PREFERRED_RESPONSE>
   </SUBMITTING_PARTY>
   <REQUEST RequestDatetime="${now}" InternalAccountIdentifier="" LoginAccountIdentifier="${CONFIG.loginId}" LoginAccountPassword="${CONFIG.loginPwd}">
     <REQUEST_DATA>
@@ -854,8 +856,8 @@ function showResults(scores) {
   } else if (window._reportHtml) {
     dlBtn.disabled      = false;
     dlBtn.textContent   = 'View Report';
-    saveBtn.disabled    = true;
-    saveBtn.textContent = 'No PDF (HTML report)';
+    saveBtn.disabled    = false;
+    saveBtn.textContent = 'Save to Lead';
   } else {
     dlBtn.disabled   = true;
     saveBtn.disabled = true;
@@ -967,10 +969,23 @@ async function savePDFToZoho() {
   log('Attaching PDF to lead record...', 'info');
 
   try {
-    const filename   = getPDFFilename();
-    const cleanB64 = pdfBase64.replace(/[^A-Za-z0-9+/=]/g, '');
-    const blob     = b64toBlob(cleanB64);
-    const file = new File([blob], filename, { type: 'application/pdf' });
+    let file;
+    if (pdfBase64) {
+      const filename  = getPDFFilename();
+      const cleanB64  = pdfBase64.replace(/[^A-Za-z0-9+/=]/g, '');
+      const blob      = b64toBlob(cleanB64);
+      file = new File([blob], filename, { type: 'application/pdf' });
+    } else if (window._reportHtml) {
+      const filename  = getPDFFilename().replace('.pdf', '.html');
+      const blob      = new Blob([window._reportHtml], { type: 'text/html' });
+      file = new File([blob], filename, { type: 'text/html' });
+    } else {
+      log('No report available to save.', 'err');
+      saveBtn.disabled    = false;
+      saveBtn.textContent = 'Save to Lead';
+      return;
+    }
+    const filename = file.name;
 
     const result = await ZOHO.CRM.API.attachFile({
       Entity:   zohoEntity,
