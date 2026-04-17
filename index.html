@@ -891,21 +891,34 @@ function getPDFFilename() {
   return (name ? name + '_CreditReport' : 'CreditReport') + '.pdf';
 }
 
+function b64toBlob(b64) {
+  // Pad if needed
+  const padded = b64 + '='.repeat((4 - b64.length % 4) % 4);
+  const binary = atob(padded);
+  const bytes  = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return new Blob([bytes], { type: 'application/pdf' });
+}
+
 function downloadPDF() {
   if (!pdfBase64) return;
-  const filename = getPDFFilename();
-  const cleanB64  = pdfBase64.replace(/[^A-Za-z0-9+/=]/g, '');
-  const byteChars = atob(cleanB64);
-  const bytes = new Uint8Array(byteChars.length);
-  for (let i = 0; i < byteChars.length; i++) bytes[i] = byteChars.charCodeAt(i);
-  const blob = new Blob([bytes], { type: 'application/pdf' });
-  const url  = URL.createObjectURL(blob);
-  const a    = document.createElement('a');
-  a.href     = url;
-  a.download = filename;
-  a.click();
-  URL.revokeObjectURL(url);
-  log('PDF downloaded: ' + filename, 'ok');
+  try {
+    const filename = getPDFFilename();
+    const clean    = pdfBase64.replace(/[^A-Za-z0-9+/=]/g, '');
+    log('PDF b64 length: ' + clean.length + ' first chars: ' + clean.substring(0, 20), 'info');
+    const blob = b64toBlob(clean);
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href     = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    log('PDF downloaded: ' + filename, 'ok');
+  } catch(e) {
+    log('Download error: ' + e.message, 'err');
+  }
 }
 
 async function savePDFToZoho() {
@@ -923,11 +936,8 @@ async function savePDFToZoho() {
 
   try {
     const filename   = getPDFFilename();
-    const cleanB64   = pdfBase64.replace(/[^A-Za-z0-9+/=]/g, '');
-    const byteChars  = atob(cleanB64);
-    const bytes      = new Uint8Array(byteChars.length);
-    for (let i = 0; i < byteChars.length; i++) bytes[i] = byteChars.charCodeAt(i);
-    const blob = new Blob([bytes], { type: 'application/pdf' });
+    const cleanB64 = pdfBase64.replace(/[^A-Za-z0-9+/=]/g, '');
+    const blob     = b64toBlob(cleanB64);
     const file = new File([blob], filename, { type: 'application/pdf' });
 
     const result = await ZOHO.CRM.API.attachFile({
