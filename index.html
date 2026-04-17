@@ -777,17 +777,33 @@ async function startPull() {
       const scores = extractScores(retrieveDoc);
       log(`EQ: ${scores.EQ || 'N/A'} | EX: ${scores.EX || 'N/A'} | TU: ${scores.TU || 'N/A'}`, 'ok');
       // Extract base64 PDF
-      // PDF base64 is inside EMBEDDED_FILE > DOCUMENT, starts with JVBERi (%PDF)
-      pdfBase64 = null;
-      const docEls = retrieveDoc.querySelectorAll('DOCUMENT');
-      log('DOCUMENT nodes found: ' + docEls.length, 'info');
-      docEls.forEach((el, i) => {
-        const raw = el.textContent.replace(/[^A-Za-z0-9+/=]/g, '');
-        log('Doc[' + i + '] len=' + raw.length + ' start=' + raw.substring(0,10), 'info');
-        if (raw.length > 1000) {
-          pdfBase64 = raw;
+      // Extract report document — may be base64 PDF or raw HTML
+      pdfBase64   = null;
+      let reportHtml = null;
+      const embeddedFile = retrieveDoc.querySelector('EMBEDDED_FILE');
+      if (embeddedFile) {
+        const encoding = embeddedFile.getAttribute('_EncodingType') || '';
+        const mimeType = embeddedFile.getAttribute('MIMEType') || '';
+        const docEl    = embeddedFile.querySelector('DOCUMENT');
+        if (docEl) {
+          const raw = docEl.textContent.trim();
+          if (/base64/i.test(encoding) && /pdf/i.test(mimeType)) {
+            // Real base64 PDF
+            pdfBase64 = raw.replace(/[^A-Za-z0-9+/=]/g, '');
+            log('PDF (base64) found, length: ' + pdfBase64.length, 'ok');
+          } else if (/html/i.test(mimeType) || raw.trimStart().startsWith('<') || raw.startsWith('MCL')) {
+            // HTML report
+            reportHtml = raw;
+            log('HTML report found — use View Report to open.', 'ok');
+          } else {
+            // Try treating as base64 anyway
+            pdfBase64 = raw.replace(/[^A-Za-z0-9+/=]/g, '');
+            log('Unknown format, attempting as base64, length: ' + pdfBase64.length, 'warn');
+          }
         }
-      });
+      }
+      // Store html report for view button
+      window._reportHtml = reportHtml;
       if (pdfBase64) {
         log('PDF report attached — ready to download/save.', 'ok');
         log('PDF b64 sample: ' + pdfBase64.substring(0,40) + '...' + pdfBase64.slice(-20), 'info');
@@ -828,12 +844,18 @@ function showResults(scores) {
 
   document.getElementById('reportIdDisplay').textContent = 'Report #' + reportId;
 
-  // Enable PDF buttons if PDF is available
+  // Enable PDF buttons based on what type of report came back
   const dlBtn   = document.getElementById('downloadBtn');
   const saveBtn = document.getElementById('saveBtn');
   if (pdfBase64) {
-    dlBtn.disabled   = false;
-    saveBtn.disabled = false;
+    dlBtn.disabled      = false;
+    dlBtn.textContent   = 'Download PDF';
+    saveBtn.disabled    = false;
+  } else if (window._reportHtml) {
+    dlBtn.disabled      = false;
+    dlBtn.textContent   = 'View Report';
+    saveBtn.disabled    = true;
+    saveBtn.textContent = 'No PDF (HTML report)';
   } else {
     dlBtn.disabled   = true;
     saveBtn.disabled = true;
@@ -879,8 +901,9 @@ function resetWidget() {
   document.getElementById('statusLog').classList.remove('visible');
   document.getElementById('logEntries').innerHTML = '';
   clearError();
-  reportId  = null;
-  pdfBase64 = null;
+  reportId       = null;
+  pdfBase64      = null;
+  window._reportHtml = null;
   document.getElementById('downloadBtn').disabled = true;
   document.getElementById('saveBtn').disabled     = true;
 }
@@ -903,23 +926,30 @@ function b64toBlob(b64) {
 }
 
 function downloadPDF() {
-  if (!pdfBase64) return;
-  try {
-    const filename = getPDFFilename();
-    const clean    = pdfBase64.replace(/[^A-Za-z0-9+/=]/g, '');
-    log('PDF b64 length: ' + clean.length + ' first chars: ' + clean.substring(0, 20), 'info');
-    const blob = b64toBlob(clean);
-    const url  = URL.createObjectURL(blob);
-    const a    = document.createElement('a');
-    a.href     = url;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-    log('PDF downloaded: ' + filename, 'ok');
-  } catch(e) {
-    log('Download error: ' + e.message, 'err');
+  if (pdfBase64) {
+    // Download as PDF
+    try {
+      const filename = getPDFFilename();
+      const clean    = pdfBase64.replace(/[^A-Za-z0-9+/=]/g, '');
+      const blob     = b64toBlob(clean);
+      const url      = URL.createObjectURL(blob);
+      const a        = document.createElement('a');
+      a.href         = url;
+      a.download     = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      log('PDF downloaded: ' + filename, 'ok');
+    } catch(e) {
+      log('Download error: ' + e.message, 'err');
+    }
+  } else if (window._reportHtml) {
+    // Open HTML report in new tab
+    const win  = window.open('', '_blank');
+    win.document.write(window._reportHtml);
+    win.document.close();
+    log('Report opened in new tab.', 'ok');
   }
 }
 
