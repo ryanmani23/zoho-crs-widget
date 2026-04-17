@@ -220,7 +220,7 @@
     .score-value.na { font-size: 16px; color: var(--text-dim); }
     .score-grade { margin-top: 4px; font-size: 10px; color: var(--text-muted); }
 
-    .results-footer { padding: 12px 14px; border-top: 1px solid var(--border); display: flex; gap: 8px; }
+    .results-footer { padding: 12px 14px; border-top: 1px solid var(--border); display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
     .footer-btn {
       flex: 1; padding: 8px; border-radius: 5px; font-size: 12px; font-weight: 500;
       cursor: pointer; font-family: var(--sans); border: 1px solid var(--border);
@@ -409,7 +409,9 @@
     </div>
     <div class="results-footer">
       <button class="footer-btn" onclick="resetWidget()">New Pull</button>
-      <button class="footer-btn primary" id="copyBtn" onclick="copyReportId()">Copy Report ID</button>
+      <button class="footer-btn" id="copyBtn" onclick="copyReportId()">Copy Report ID</button>
+      <button class="footer-btn primary" id="downloadBtn" onclick="downloadPDF()" disabled>Download PDF</button>
+      <button class="footer-btn primary" id="saveBtn" onclick="savePDFToZoho()" disabled>Save to Lead</button>
     </div>
   </div>
 
@@ -420,12 +422,12 @@
 // CONFIG — swap these 4 for production values
 // ─────────────────────────────────────────────
 const CONFIG = {
-  host:       'mware.crscreditapi.com',
+  host:       'api-sandbox.stitchcredit.com',
   endpoint:   'https://crimson-queen-677f.ryanmani.workers.dev',
-  loginId:    'LEGIONSAPI',
-  loginPwd:   '2754v5u3',
-  submitter:  'VersysCo05292020',
-  submitterName: 'Legions United Funding',
+  loginId:    'LegionsUnitedSbox',
+  loginPwd:   'MbLgVyJN6LB8PfopmKKA$H8L',
+  submitter:  'TestSubmittingPartyID',
+  submitterName: 'submitterName',
   pollMax:    12,
   pollDelay:  5000, // ms between poll attempts
 };
@@ -438,6 +440,7 @@ let lead = {
   ssn: '', dob: '', street: '', city: '', state: '', zip: ''
 };
 let reportId = null;
+let pdfBase64 = null;
 let polling = false;
 
 // ─────────────────────────────────────────────
@@ -771,6 +774,10 @@ async function startPull() {
       log('Report ready — parsing scores...', 'ok');
       const scores = extractScores(retrieveDoc);
       log(`EQ: ${scores.EQ || 'N/A'} | EX: ${scores.EX || 'N/A'} | TU: ${scores.TU || 'N/A'}`, 'ok');
+      // Extract base64 PDF
+      const docEl = retrieveDoc.querySelector('DOCUMENT');
+      pdfBase64 = docEl ? docEl.textContent.trim() : null;
+      if (pdfBase64) log('PDF report attached — ready to download/save.', 'ok');
       showResults(scores);
       setLoading(false);
       return;
@@ -806,6 +813,17 @@ function showResults(scores) {
   panel.classList.add('visible');
 
   document.getElementById('reportIdDisplay').textContent = 'Report #' + reportId;
+
+  // Enable PDF buttons if PDF is available
+  const dlBtn   = document.getElementById('downloadBtn');
+  const saveBtn = document.getElementById('saveBtn');
+  if (pdfBase64) {
+    dlBtn.disabled   = false;
+    saveBtn.disabled = false;
+  } else {
+    dlBtn.disabled   = true;
+    saveBtn.disabled = true;
+  }
 
   ['EQ','EX','TU'].forEach(b => {
     const val = scores[b];
@@ -847,7 +865,81 @@ function resetWidget() {
   document.getElementById('statusLog').classList.remove('visible');
   document.getElementById('logEntries').innerHTML = '';
   clearError();
-  reportId = null;
+  reportId  = null;
+  pdfBase64 = null;
+  document.getElementById('downloadBtn').disabled = true;
+  document.getElementById('saveBtn').disabled     = true;
+}
+
+// ─────────────────────────────────────────────
+// PDF helpers
+// ─────────────────────────────────────────────
+function getPDFFilename() {
+  const name = [lead.lastName, lead.firstName].filter(Boolean).join('_');
+  return (name ? name + '_CreditReport' : 'CreditReport') + '.pdf';
+}
+
+function downloadPDF() {
+  if (!pdfBase64) return;
+  const filename = getPDFFilename();
+  const byteChars = atob(pdfBase64);
+  const bytes = new Uint8Array(byteChars.length);
+  for (let i = 0; i < byteChars.length; i++) bytes[i] = byteChars.charCodeAt(i);
+  const blob = new Blob([bytes], { type: 'application/pdf' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href     = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+  log('PDF downloaded: ' + filename, 'ok');
+}
+
+async function savePDFToZoho() {
+  if (!pdfBase64) return;
+  const saveBtn = document.getElementById('saveBtn');
+
+  if (typeof ZOHO === 'undefined') {
+    log('Cannot save — not running inside Zoho.', 'err');
+    return;
+  }
+
+  saveBtn.disabled  = true;
+  saveBtn.textContent = 'Saving...';
+  log('Attaching PDF to lead record...', 'info');
+
+  try {
+    const filename = getPDFFilename();
+    const byteChars = atob(pdfBase64);
+    const bytes = new Uint8Array(byteChars.length);
+    for (let i = 0; i < byteChars.length; i++) bytes[i] = byteChars.charCodeAt(i);
+    const blob = new Blob([bytes], { type: 'application/pdf' });
+    const file = new File([blob], filename, { type: 'application/pdf' });
+
+    // Get current record ID from Zoho context
+    const pageData = await new Promise(resolve => {
+      ZOHO.embeddedApp.on('PageLoad', resolve);
+    });
+    const recordId = pageData.EntityId[0];
+    const entity   = pageData.Entity;
+
+    const result = await ZOHO.CRM.API.attachFile({
+      Entity:   entity,
+      RecordID: recordId,
+      File: { Name: filename, Content: file }
+    });
+
+    if (result && result[0] && result[0].code === 'SUCCESS') {
+      saveBtn.textContent = '✓ Saved!';
+      log('PDF saved to lead attachments: ' + filename, 'ok');
+    } else {
+      throw new Error(JSON.stringify(result));
+    }
+  } catch (err) {
+    saveBtn.disabled    = false;
+    saveBtn.textContent = 'Save to Lead';
+    log('Failed to save PDF: ' + err.message, 'err');
+  }
 }
 
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
