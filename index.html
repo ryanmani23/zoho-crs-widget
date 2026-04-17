@@ -451,11 +451,21 @@ let polling = false;
 // Zoho Widget SDK init
 // ─────────────────────────────────────────────
 function initZoho() {
-  // Zoho widget SDK — loads lead fields when available
-  if (false && typeof ZOHO !== 'undefined') { // SET TO false FOR SANDBOX TESTING, remove 'false &&' FOR PRODUCTION
+  if (typeof ZOHO !== 'undefined') {
     ZOHO.embeddedApp.on("PageLoad", function(data) {
       zohoEntity   = data.Entity;
       zohoRecordId = data.EntityId[0];
+      // SANDBOX MODE: always use test data for the credit pull,
+      // but still capture record context so Save to Lead works
+      // TO GO PRODUCTION: remove the 4 lines below and uncomment the getRecord block
+      lead = {
+        firstName: 'MARISOL', lastName: 'TESTCASE', middleName: 'L',
+        ssn: '000000001', dob: '1999-01-30',
+        street: '220 Locust Ave', city: 'Anthill', state: 'MO', zip: '65488'
+      };
+      renderLeadCard();
+      log('Sandbox mode — using test borrower data. Record context loaded for Save to Lead.', 'warn');
+      /* PRODUCTION — uncomment this block and remove the sandbox block above:
       ZOHO.CRM.API.getRecord({ Entity: zohoEntity, RecordID: zohoRecordId }).then(function(res) {
         const r = res.data[0];
         lead.firstName  = r['First_Name']  || '';
@@ -469,6 +479,7 @@ function initZoho() {
         lead.zip        = r['Zip_Code'] || r['Mailing_Zip']  || '';
         renderLeadCard();
       });
+      */
     });
     ZOHO.embeddedApp.init();
   } else {
