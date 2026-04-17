@@ -483,6 +483,18 @@ function initZoho() {
       */
     });
     ZOHO.embeddedApp.init();
+    // Fallback: if PageLoad doesn't fire within 3s, load sandbox test data anyway
+    setTimeout(function() {
+      if (!zohoRecordId) {
+        lead = {
+          firstName: 'MARISOL', lastName: 'TESTCASE', middleName: 'L',
+          ssn: '000000001', dob: '1999-01-30',
+          street: '220 Locust Ave', city: 'Anthill', state: 'MO', zip: '65488'
+        };
+        renderLeadCard();
+        log('v2.1 — PageLoad timeout, using sandbox test data. Save to Lead unavailable.', 'warn');
+      }
+    }, 3000);
   } else {
     // ── DEMO MODE (running outside Zoho) ──
     lead = {
@@ -1010,11 +1022,21 @@ async function savePDFToZoho() {
       File: { Name: filename, Content: file }
     });
 
-    if (result && result[0] && result[0].code === 'SUCCESS') {
+    // attachFile can return various success shapes — check multiple patterns
+    const resultStr = JSON.stringify(result);
+    const isSuccess = (
+      (result && result[0] && result[0].code === 'SUCCESS') ||
+      (result && result.status === 'success') ||
+      (result && result[0] && result[0].status === 'success') ||
+      resultStr.includes('"status":"success"') ||
+      resultStr.includes('attachment uploaded successfully')
+    );
+
+    if (isSuccess) {
       saveBtn.textContent = '✓ Saved!';
-      log('PDF saved to lead attachments: ' + filename, 'ok');
+      log('Report saved to lead attachments: ' + filename, 'ok');
     } else {
-      throw new Error(JSON.stringify(result));
+      throw new Error(resultStr);
     }
   } catch (err) {
     saveBtn.disabled    = false;
