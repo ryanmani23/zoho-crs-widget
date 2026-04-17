@@ -439,8 +439,10 @@ let lead = {
   firstName: '', lastName: '', middleName: '',
   ssn: '', dob: '', street: '', city: '', state: '', zip: ''
 };
-let reportId = null;
-let pdfBase64 = null;
+let reportId    = null;
+let pdfBase64   = null;
+let zohoEntity   = null;
+let zohoRecordId = null;
 let polling = false;
 
 // ─────────────────────────────────────────────
@@ -450,15 +452,15 @@ function initZoho() {
   // Zoho widget SDK — loads lead fields when available
   if (false && typeof ZOHO !== 'undefined') { // SET TO false FOR SANDBOX TESTING, remove 'false &&' FOR PRODUCTION
     ZOHO.embeddedApp.on("PageLoad", function(data) {
-      const entity = data.Entity;
-      const id = data.EntityId[0];
-      ZOHO.CRM.API.getRecord({ Entity: entity, RecordID: id }).then(function(res) {
+      zohoEntity   = data.Entity;
+      zohoRecordId = data.EntityId[0];
+      ZOHO.CRM.API.getRecord({ Entity: zohoEntity, RecordID: zohoRecordId }).then(function(res) {
         const r = res.data[0];
         lead.firstName  = r['First_Name']  || '';
         lead.lastName   = r['Last_Name']   || '';
         lead.middleName = r['Middle_Name'] || '';
         lead.ssn        = (r['SSN'] || '').replace(/\D/g, '');
-        lead.dob        = r['Date_of_Birth'] || r['DOB'] || '';  // adjust to your actual field API name
+        lead.dob        = r['Date_of_Birth'] || r['DOB'] || '';
         lead.street     = r['Street'] || r['Mailing_Street'] || '';
         lead.city       = r['City']   || r['Mailing_City']   || '';
         lead.state      = r['State']  || r['Mailing_State']  || '';
@@ -776,7 +778,7 @@ async function startPull() {
       log(`EQ: ${scores.EQ || 'N/A'} | EX: ${scores.EX || 'N/A'} | TU: ${scores.TU || 'N/A'}`, 'ok');
       // Extract base64 PDF
       const docEl = retrieveDoc.querySelector('DOCUMENT');
-      pdfBase64 = docEl ? docEl.textContent.trim() : null;
+      pdfBase64 = docEl ? docEl.textContent.replace(/\s+/g, '') : null;
       if (pdfBase64) log('PDF report attached — ready to download/save.', 'ok');
       showResults(scores);
       setLoading(false);
@@ -882,7 +884,8 @@ function getPDFFilename() {
 function downloadPDF() {
   if (!pdfBase64) return;
   const filename = getPDFFilename();
-  const byteChars = atob(pdfBase64);
+  const cleanB64  = pdfBase64.replace(/\s+/g, '');
+  const byteChars = atob(cleanB64);
   const bytes = new Uint8Array(byteChars.length);
   for (let i = 0; i < byteChars.length; i++) bytes[i] = byteChars.charCodeAt(i);
   const blob = new Blob([bytes], { type: 'application/pdf' });
@@ -899,33 +902,27 @@ async function savePDFToZoho() {
   if (!pdfBase64) return;
   const saveBtn = document.getElementById('saveBtn');
 
-  if (typeof ZOHO === 'undefined') {
+  if (typeof ZOHO === 'undefined' || !zohoRecordId) {
     log('Cannot save — not running inside Zoho.', 'err');
     return;
   }
 
-  saveBtn.disabled  = true;
+  saveBtn.disabled    = true;
   saveBtn.textContent = 'Saving...';
   log('Attaching PDF to lead record...', 'info');
 
   try {
-    const filename = getPDFFilename();
-    const byteChars = atob(pdfBase64);
-    const bytes = new Uint8Array(byteChars.length);
+    const filename   = getPDFFilename();
+    const cleanB64   = pdfBase64.replace(/\s+/g, '');
+    const byteChars  = atob(cleanB64);
+    const bytes      = new Uint8Array(byteChars.length);
     for (let i = 0; i < byteChars.length; i++) bytes[i] = byteChars.charCodeAt(i);
     const blob = new Blob([bytes], { type: 'application/pdf' });
     const file = new File([blob], filename, { type: 'application/pdf' });
 
-    // Get current record ID from Zoho context
-    const pageData = await new Promise(resolve => {
-      ZOHO.embeddedApp.on('PageLoad', resolve);
-    });
-    const recordId = pageData.EntityId[0];
-    const entity   = pageData.Entity;
-
     const result = await ZOHO.CRM.API.attachFile({
-      Entity:   entity,
-      RecordID: recordId,
+      Entity:   zohoEntity,
+      RecordID: zohoRecordId,
       File: { Name: filename, Content: file }
     });
 
