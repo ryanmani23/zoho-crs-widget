@@ -778,8 +778,18 @@ async function startPull() {
       log(`EQ: ${scores.EQ || 'N/A'} | EX: ${scores.EX || 'N/A'} | TU: ${scores.TU || 'N/A'}`, 'ok');
       // Extract base64 PDF
       const docEl = retrieveDoc.querySelector('DOCUMENT');
-      pdfBase64 = docEl ? docEl.textContent.replace(/\s+/g, '') : null;
-      if (pdfBase64) log('PDF report attached — ready to download/save.', 'ok');
+      if (docEl) {
+        // Strip whitespace and any non-base64 characters (CDATA remnants etc)
+        pdfBase64 = docEl.textContent.replace(/[^A-Za-z0-9+/=]/g, '');
+        // Validate it's non-empty and looks like base64
+        if (!pdfBase64 || pdfBase64.length < 100) pdfBase64 = null;
+      } else {
+        pdfBase64 = null;
+      }
+      if (pdfBase64) {
+        log('PDF report attached — ready to download/save.', 'ok');
+        log('PDF b64 sample: ' + pdfBase64.substring(0,40) + '...' + pdfBase64.slice(-20), 'info');
+      }
       showResults(scores);
       setLoading(false);
       return;
@@ -884,7 +894,7 @@ function getPDFFilename() {
 function downloadPDF() {
   if (!pdfBase64) return;
   const filename = getPDFFilename();
-  const cleanB64  = pdfBase64.replace(/\s+/g, '');
+  const cleanB64  = pdfBase64.replace(/[^A-Za-z0-9+/=]/g, '');
   const byteChars = atob(cleanB64);
   const bytes = new Uint8Array(byteChars.length);
   for (let i = 0; i < byteChars.length; i++) bytes[i] = byteChars.charCodeAt(i);
@@ -913,7 +923,7 @@ async function savePDFToZoho() {
 
   try {
     const filename   = getPDFFilename();
-    const cleanB64   = pdfBase64.replace(/\s+/g, '');
+    const cleanB64   = pdfBase64.replace(/[^A-Za-z0-9+/=]/g, '');
     const byteChars  = atob(cleanB64);
     const bytes      = new Uint8Array(byteChars.length);
     for (let i = 0; i < byteChars.length; i++) bytes[i] = byteChars.charCodeAt(i);
